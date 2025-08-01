@@ -19,8 +19,12 @@ Servo backRight;
 
 Servo cannon;
 
-float launch_windup = 0;
-float launch_increment = 0.005;
+int lastGoodValue = 127;
+int hold = 3;
+int framecount = 0;
+
+int alpha = 0.1;
+int smoothed = 0;
 
 void setup() {
   Serial.begin(57600);
@@ -54,55 +58,75 @@ void setup() {
 
 void loop() {
   ps2x.read_gamepad(false, vibrate);
+ 
+  int Y = 0;
+  int X = 0;
+  int Z = 0;
 
-  LY = ps2x.Analog(PSS_LY);
-  LX = ps2x.Analog(PSS_LX);
-  RY = ps2x.Analog(PSS_RY);
-  RX = ps2x.Analog(PSS_RX);
-
-  drive(LY, 127, 127);
-  
-  if (ps2x.Button(PSB_GREEN)) {
-    shoot(0.5);
+  if (ps2x.Button(PSB_PAD_UP)) {
+    Y = -100;
+  } else if (ps2x.Button(PSB_PAD_LEFT)) {
+    X = -100;
+  } else if (ps2x.Button(PSB_PAD_RIGHT)) {
+    X = 100;
+  } else if (ps2x.Button(PSB_PAD_DOWN)) {
+    Y = 100;
+  }
+  if (ps2x.Button(PSB_L2)) {
+    Z = -100;
+  } else if (ps2x.Button(PSB_R2)) {
+    Z = 100;
   }
 
-  /*if (ps2x.Button(PSB_GREEN) && (launch_windup + launch_increment) < 1) {
-    launch_windup += launch_increment;
-  } else if (launch_windup > 0) {
-    shoot(launch_windup * 127);
-    launch_windup = 0;
-  } */
+  Serial.println(Y);
+
+  drive(Y, X, Z);
+  
+  if (ps2x.Button(PSB_GREEN)) {
+    cannon.writeMicroseconds(1000);
+  } else {
+    cannon.writeMicroseconds(1500);
+  }
 }
 
 void setFrontLeft(float power) {
-  frontLeft.writeMicroseconds(map(power, 0, 255, 1700, 1300));
+  frontLeft.writeMicroseconds(map(power, -100, 100, 1700, 1300));
 }
 void setFrontRight(float power) {
-  frontRight.writeMicroseconds(map(power, 0, 255, 1300, 1700));
+  frontRight.writeMicroseconds(map(power, -100, 100, 1300, 1700));
 }
 void setBackLeft(float power) {
-  backLeft.writeMicroseconds(map(power, 0, 255, 1700, 1300));
+  backLeft.writeMicroseconds(map(power, -100, 100, 1700, 1300));
 }
 void setBackRight(float power) {
-  backRight.writeMicroseconds(map(power, 0, 255, 1300, 1700));
+  backRight.writeMicroseconds(map(power, -100, 100, 1300, 1700));
 }
 
 void drive(float drive, float strafe, float turn) {
-  /*set(frontLeft, x + y + theta);
-  set(frontRight, x - y - theta);
-  set(backLeft, x - y + theta);
-  set(backRight, x + y - theta);*/
+  float frontLeftPower = -drive + strafe + turn;
+  float frontRightPower = -drive + strafe - turn;
+  float backLeftPower = -drive - strafe + turn;
+  float backRightPower = -drive - strafe - turn;
 
-  setFrontLeft(drive);
-  setFrontRight(drive);
-  setBackLeft(drive);
-  setBackRight(drive);
+  setFrontLeft(frontLeftPower);
+  setFrontRight(frontRightPower);
+  setBackLeft(backLeftPower);
+  setBackRight(backRightPower);
 }
 
-void shoot(float power) {
-  cannon.writeMicroseconds(map(power, 0, 1, 1000, 2000));
+int filter(int newReading) {
+  if (framecount < hold) {
+    framecount++;
+    return lastGoodValue;
+  }
 
-  delay(1000);
+  if (newReading - lastGoodValue > delay) {
+    lastGoodValue = newReading;
 
-  cannon.writeMicroseconds(1500);
+    return lastGoodValue;
+  }
+
+  lastGoodValue = newReading;
+
+  return newReading;
 }
